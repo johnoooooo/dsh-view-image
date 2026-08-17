@@ -8,16 +8,17 @@
 
 ## 安装
 
-把本包安装进目标 profile 并在 `dsh.profile.bundles` 中声明（与 `dsh1024` 相同的方式）：
+把本包安装进目标 profile（与 `dsh1024` 相同的方式）：
 
 ```bash
-# 1. 安装到 profile（无任何运行时依赖，不需要访问 npm registry）
+# 一步完成：安装包，并把 "dsh-view-image" 自动追加到
+# dsh.profile.bundles（与 dependencies 一起写进 profile 的 package.json）
 dsh plugin --profile web add file:/mnt/d/codes/dsh-view-image
-
-# 2. 把 "dsh-view-image" 追加到 profile 的 dsh.profile.bundles：
-#    ~/.dsh/profiles/<name>/package.json
-#    "dsh": { "profile": { "bundles": [..., "dsh-view-image"] } }
 ```
+
+> 注意：`file:` 安装是**拷贝**进 profile 的 node_modules，不是软链。
+> 改完本插件代码后需要重新执行上面的 add（pnpm 会更新拷贝），
+> 再重启 dsh。
 
 或者不碰 bundles，把 `cordis.patch.yml` 里的行复制进 profile 的
 `cordis.patch.yml`（**但 packages 里必须先装好**，见上一步）。
