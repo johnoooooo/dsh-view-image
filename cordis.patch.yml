@@ -1,0 +1,13 @@
+# dsh-view-image bundle patch.
+#
+# Mounts the view_image tool plugin. When this package is listed in a
+# profile's dsh.profile.bundles (package.json -> dsh.profile.bundles), this
+# patch applies automatically. Alternatively, copy the row below into the
+# profile's own cordis.patch.yml (the package must then be installed into the
+# profile, e.g. `dsh plugin --profile <name> add file:<path>`).
+#
+# The vision model is NOT configured here — it lives in
+# $DSH_HOME/vision-model.json (see vision-model.example.json).
+- insert:
+    - id: view-image
+      name: 'dsh-view-image'

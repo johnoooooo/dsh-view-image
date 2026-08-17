@@ -1,0 +1,7 @@
+{
+  "baseUrl": "http://localhost:11434/v1",
+  "apiKey": "ollama",
+  "model": "llama3.2-vision",
+  "api": "openai-completions",
+  "maxTokens": 2048
+}

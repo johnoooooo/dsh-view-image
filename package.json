@@ -1,0 +1,35 @@
+{
+  "name": "dsh-view-image",
+  "version": "0.1.0",
+  "description": "让 dsh 用独立的 OpenAI 兼容视觉模型读图：主对话历史只保留纯文本描述，图片字节不进上下文，纯文本模型也能读图。",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "vision",
+    "image",
+    "ocr",
+    "view-image"
+  ],
+  "license": "MIT",
+  "author": "johnoooooo",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "vision-model.example.json",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
