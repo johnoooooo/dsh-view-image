@@ -17,7 +17,14 @@ dsh plugin --profile web add file:/mnt/d/codes/dsh-view-image
 ```
 
 > 注意：`file:` 安装是**拷贝**进 profile 的 node_modules，不是软链。
-> 改完本插件代码后需要重新执行上面的 add（pnpm 会更新拷贝），
+> 改完本插件代码后，pnpm 在依赖已存在时不会刷新拷贝（`add` 会报
+> "Already up to date"），需要先移除再重装：
+>
+> ```bash
+> dsh plugin --profile web remove dsh-view-image
+> dsh plugin --profile web add file:/mnt/d/codes/dsh-view-image
+> ```
+>
 > 再重启 dsh。
 
 或者不碰 bundles，把 `cordis.patch.yml` 里的行复制进 profile 的
@@ -68,6 +75,7 @@ cp vision-model.example.json ~/.dsh/vision-model.json
         maxImageBytes: 10485760                # 单张图片字节上限（file_path 路径），超限报错不截断
         defaultPrompt: '详细描述这张图片的内容，包括文字、图形、布局等关键信息。用中文回答。'
         rewritePastedImages: true              # 是否接管 Web 粘贴图片（默认 true）
+        inlineImagePreview: true               # 是否挂附件预览路由 + 聊天里内联显示粘贴图（默认 true）
 ```
 
 ## 使用
@@ -79,7 +87,8 @@ cp vision-model.example.json ~/.dsh/vision-model.json
    落库为持久附件，并替换成文本标记 `[图片附件: ...]` 发给模型——所以不会再弹
    「当前模型不支持图片」的拒绝提示。
 3. 模型看到标记后自动调用 `view_image`（传 `attachment_id` 等字段），用你配的
-   视觉模型识别，返回纯文本描述。
+   视觉模型识别，返回纯文本描述；**聊天流里用户消息行会内联显示这张粘贴图**
+   （客户端模块渲染，图片字节不进模型上下文），工具行保持 dsh 原生卡片样式。
 
 > 原理：dsh 内置的 admission 会拒绝「当前模型不支持 image 输入」的粘贴。本插件
 > 包装了宿主 `apiProxy.sessions.prompt`：仅当路由是纯文本模型时，把图片 part 通过
@@ -108,10 +117,21 @@ dsh --profile headless "用 view_image 工具查看 /path/to/img.png 并描述�
   不占模型上下文。
 - `systemPrompt.section` 给出一段引导，让模型在文本路由上用 `view_image`
   代替会失败的 `read_image`。
-- 请求转发 `exec.signal`（`AbortSignal.any` 叠加超时），可随任务取消。
+- 请求转发 `exec.signal`（`AbortSignal.any` 叠加超时），可随任务取消；超时与
+  用户取消分开报错（宿主 deadline 的 `TimeoutReason` 也按超时上报）。
 - Web 粘贴改写用 `ctx.inject(["apiProxy"], ...)` 等服务就绪后包装
   `apiProxy.sessions.prompt`，仅在纯文本路由时把 image parts 改写为文本标记；
-  任何异常都回退到原生流程，不会阻塞正常对话。
+  任何异常都回退到原生流程，不会阻塞正常对话。纯文本判定优先取该 session 已
+  路由的模型（与宿主 admission 一致），新会话回退默认模型选择；插件卸载/HMR
+  重建时会恢复原实现并清标志。
+- 粘贴改写时把落库的完整附件 ref 登记到进程内 registry，`view_image` 读取时
+  优先用登记 ref，模型不必精确转抄标记中的每个字段（跨重启 replay 由标记字段兑底）。
+- 附件预览路由 `/dsh-view-image/attachment/<sha256>`（`webServer` 前缀路由）：
+  按内容寻址 id 提供附件字节（先查进程内 registry，再靠 URL 里的 ref 字段兑底，
+  `attachments.readImage` 做完整性校验），供客户端内联图拉取。
+- 客户端模块（`dsh.client`，web 平台）：纯展示层 DOM 增强——找到用户消息里的
+  `[图片附件: sha256:...]` 标记，在消息行内插入一张 `<img>`（字节由上面的预览
+  路由提供），不接管任何工具行/卡片，模型上下文内容不变。
 
 ## 与 view-image（pi 扩展）的关系
 
