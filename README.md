@@ -87,8 +87,12 @@ cp vision-model.example.json ~/.dsh/vision-model.json
    落库为持久附件，并替换成文本标记 `[图片附件: ...]` 发给模型——所以不会再弹
    「当前模型不支持图片」的拒绝提示。
 3. 模型看到标记后自动调用 `view_image`（传 `attachment_id` 等字段），用你配的
-   视觉模型识别，返回纯文本描述；**聊天流里用户消息行会内联显示这张粘贴图**
-   （客户端模块渲染，图片字节不进模型上下文），工具行保持 dsh 原生卡片样式。
+   视觉模型识别，返回纯文本描述；**聊天流里用户消息会内联显示这张粘贴图**
+   （与视觉路由下 ImageGallery 同位置：气泡上方、右对齐、240px 缩略图；
+   点击放大、可拖拽/复制到输入框重新发送），工具行保持 dsh 原生卡片样式。
+
+   > 已知问题：点击缩略图上的「复制」按钮后，部分环境里无法粘贴到输入框，
+   > 见 [BUGS.md](./BUGS.md)。
 
 > 原理：dsh 内置的 admission 会拒绝「当前模型不支持 image 输入」的粘贴。本插件
 > 包装了宿主 `apiProxy.sessions.prompt`：仅当路由是纯文本模型时，把图片 part 通过
@@ -130,8 +134,27 @@ dsh --profile headless "用 view_image 工具查看 /path/to/img.png 并描述�
   按内容寻址 id 提供附件字节（先查进程内 registry，再靠 URL 里的 ref 字段兑底，
   `attachments.readImage` 做完整性校验），供客户端内联图拉取。
 - 客户端模块（`dsh.client`，web 平台）：纯展示层 DOM 增强——找到用户消息里的
-  `[图片附件: sha256:...]` 标记，在消息行内插入一张 `<img>`（字节由上面的预览
-  路由提供），不接管任何工具行/卡片，模型上下文内容不变。
+  `[图片附件: sha256:...]` 标记，把缩略图插到 `userRow`（下钻 `display:contents`
+  包装层），与视觉路由下 ImageGallery 同位置：气泡上方、右对齐、240px singleFit、
+  object-fit cover。交互：点击放大（lightbox）、悬停「复制」按钮（写剪贴板后
+  Ctrl+V 到输入框）、可拖拽到输入框（预取字节构造 File 走 composer 原生 drop
+  路径）。不接管任何工具行/卡片，模型上下文内容不变。
+
+## 附件存储
+
+粘贴改写会把图片字节落库为持久附件（`attachments.saveImage`，与 dsh 原生粘贴
+同一套机制），内容寻址、同图去重、每次读取做 digest/尺寸完整性校验：
+
+```
+~/.dsh/attachments/v1/objects/<sha256前2位>/<sha256>   # 文件名 = 图片字节的 sha256
+```
+
+- **没有 GC**：删会话不会删附件，目录只增不减；想清空就 `rm -rf ~/.dsh/attachments`。
+- 为什么落盘而不是内存：会话可恢复/重放（重启后靠标记字段重新读图）、复用宿主
+  校验与限额。
+- 改写流程的会话日志里只有文本标记、没有 image block 引用，所以宿主
+  `session.attachment` RPC（要求会话日志引用）不适用，内联图改走插件自建的
+  预览路由。
 
 ## 与 view-image（pi 扩展）的关系
 
