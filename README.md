@@ -65,15 +65,31 @@ cp vision-model.example.json ~/.dsh/vision-model.json
       config:
         configPath: ~/.dsh/vision-model.json   # 默认
         requestTimeoutMs: 180000               # 单次视觉请求超时（毫秒）
-        maxImageBytes: 10485760                # 单张图片字节上限，超限报错不截断
+        maxImageBytes: 10485760                # 单张图片字节上限（file_path 路径），超限报错不截断
         defaultPrompt: '详细描述这张图片的内容，包括文字、图形、布局等关键信息。用中文回答。'
+        rewritePastedImages: true              # 是否接管 Web 粘贴图片（默认 true）
 ```
 
 ## 使用
 
-1. 在 dsh 里提到图片路径即可（粘贴的剪贴板图片、任意 `.png/.jpg/.jpeg/.webp/.gif/.bmp` 文件）。
-2. 主模型会自动调用 `view_image`，工具内部用你配的视觉模型识别图片，返回纯文本描述。
-3. 想指定关注点就带上 intent，例如 `"提取图中文字"`、`"描述图表内容"`。
+### Web 界面（粘贴图片）
+
+1. 在输入框**直接粘贴图片**（Ctrl+V）。
+2. 纯文本路由下（比如 deepseek-v4-flash）：本插件在宿主 API 层把粘贴的图片
+   落库为持久附件，并替换成文本标记 `[图片附件: ...]` 发给模型——所以不会再弹
+   「当前模型不支持图片」的拒绝提示。
+3. 模型看到标记后自动调用 `view_image`（传 `attachment_id` 等字段），用你配的
+   视觉模型识别，返回纯文本描述。
+
+> 原理：dsh 内置的 admission 会拒绝「当前模型不支持 image 输入」的粘贴。本插件
+> 包装了宿主 `apiProxy.sessions.prompt`：仅当路由是纯文本模型时，把图片 part 通过
+> attachments 服务保存为持久附件，再替换成文本标记（图片字节不进对话历史，也
+> 到不了文本模型的请求里）。模型支持图片时完全不动，走原生流程。
+
+### 终端 / headless（提到图片路径）
+
+主模型会自动调用 `view_image`（传 `file_path`），工具读取图片并返回文本描述。
+想指定关注点就带上 intent，例如 `"提取图中文字"`、`"描述图表内容"`。
 
 headless 验证：
 
@@ -83,8 +99,9 @@ dsh --profile headless "用 view_image 工具查看 /path/to/img.png 并描述�
 
 ## 工作原理
 
-- 工具 `execute` 用 `ctx.fs` 解析路径（按调用 session 的 cwd）并读取字节，
-  `readBytes` 超限抛 `FS_TOO_LARGE`，**永远不会截断图片**。
+- 工具 `execute` 支持两种源：`file_path`（`ctx.fs` 解析，尊重 session cwd）或
+  `attachment_id`（持久附件，从 `[图片附件: ...]` 标记读取）。
+- `readBytes`/`attachments.readImage` 都遵守各自的完整性校验，**永远不会截断图片**。
 - 图片以 base64 data URL 发给独立视觉模型，`output.render` 只把纯文本写进
   content，工具结果里**没有 image block**。
 - `output.presentationMeta` 携带 `path`/`mediaType`/`provider`，只用于 UI，
@@ -92,6 +109,9 @@ dsh --profile headless "用 view_image 工具查看 /path/to/img.png 并描述�
 - `systemPrompt.section` 给出一段引导，让模型在文本路由上用 `view_image`
   代替会失败的 `read_image`。
 - 请求转发 `exec.signal`（`AbortSignal.any` 叠加超时），可随任务取消。
+- Web 粘贴改写用 `ctx.inject(["apiProxy"], ...)` 等服务就绪后包装
+  `apiProxy.sessions.prompt`，仅在纯文本路由时把 image parts 改写为文本标记；
+  任何异常都回退到原生流程，不会阻塞正常对话。
 
 ## 与 view-image（pi 扩展）的关系
 
