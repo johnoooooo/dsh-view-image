@@ -45,7 +45,7 @@ cp vision-model.example.opencode.json ~/.dsh/vision-model.json
 {
   "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
   "apiKey": "sk-your-aliyun-api-key",
-  "model": "qwen-vl-max",
+  "model": "qwen3.7-plus",
   "api": "openai-completions",
   "maxTokens": 2048
 }
