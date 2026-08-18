@@ -47,25 +47,7 @@ cp vision-model.example.json ~/.dsh/vision-model.json
 
 ## 可选插件配置
 
-bundle 自带默认配置（见仓库 `cordis.patch.yml`），开箱即用。要覆盖时在 profile 的 `cordis.patch.yml` 用**同 id 覆盖条目**（不是 insert，避免与 bundle 重复；config 整体替换，注意把要保留的字段都写上）：
-
-```yaml
-- id: view-image
-  name: 'dsh-view-image'
-  config:
-    defaultPrompt: '完整描述图片中所有内容，包括所有文字、图形和布局结构。用中文回答。'
-    intentGuidance: ''   # 可选；默认跟随 defaultPrompt，空字符串禁用
-```
-
-| 字段 | 默认值 | 说明 |
-|---|---|---|
-| `configPath` | `~/.dsh/vision-model.json` | 视觉模型配置文件路径 |
-| `requestTimeoutMs` | `180000` | 单次视觉请求超时（毫秒） |
-| `maxImageBytes` | `10485760` | 单张图片字节上限（`file_path`），超限报错不截断 |
-| `defaultPrompt` | `完整描述图片中所有内容…` | 主模型不传 intent 时视觉模型收到的完整提示词 |
-| `intentGuidance` | 跟随 `defaultPrompt` | 软引导主模型生成 intent 的默认偏好（用户明确要求时以用户为准）；空字符串禁用 |
-| `rewritePastedImages` | `true` | 是否接管 Web 粘贴图片 |
-| `inlineImagePreview` | `true` | 是否在聊天里内联显示粘贴图 |
+插件 bundle 自带默认配置（见仓库 `cordis.patch.yml`），开箱即用，一般无需修改。
 
 ## 使用
 
