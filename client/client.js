@@ -83,7 +83,34 @@ function singleFit(width, height) {
 
 // ─ 加入输入框 / 复制：绕开剪贴板的可靠路径 + 尽力剪贴板 ────────────
 
-const COPY_LABEL = 'Copy'
+// ─ 本地化：跟随 dsh 界面语言，支持实时切换 ────────────
+
+const LOCALE_NS = 'dsh-view-image'
+
+/** 双语字典（zh/en key 集必须一致，register 会校验）。 */
+const DICTS = {
+  zh: {
+    copy: '复制',
+    copiedAdded: '已复制到剪贴板，已加入输入框',
+    copied: '已复制到剪贴板',
+    added: '已加入输入框',
+    failed: '复制失败',
+    title: '复制到剪贴板，同时加入输入框',
+    alt: '粘贴的图片',
+  },
+  en: {
+    copy: 'Copy',
+    copiedAdded: 'Copied & added to input',
+    copied: 'Copied to clipboard',
+    added: 'Added to input',
+    failed: 'Copy failed',
+    title: 'Copy to clipboard and add to input',
+    alt: 'pasted image',
+  },
+}
+
+/** 翻译函数：apply 里接入 ctx.locale 后替换为官方实现；异常环境回退英文。 */
+let translate = (key) => DICTS.en[key] ?? key
 const CLIPBOARD_TIMEOUT_MS = 3000
 
 /**
@@ -182,7 +209,8 @@ function writeImageToClipboard(file) {
 function flashButton(button, text) {
   button.textContent = text
   setTimeout(() => {
-    if (button.isConnected) button.textContent = COPY_LABEL
+    // 还原文案用当前语言的 translate（语言实时切换后也正确）。
+    if (button.isConnected) button.textContent = translate('copy')
   }, 2000)
 }
 
@@ -195,14 +223,14 @@ function handleCopyClick(button, id, mediaType) {
       // 副路径：尽力写剪贴板，Ctrl+V 仍可用。
       const clip = await writeImageToClipboard(file)
       console.log('[view-image] copy result:', { injected, clip })
-      if (clip.ok && injected) flashButton(button, 'Copied & added to input')
-      else if (clip.ok) flashButton(button, 'Copied to clipboard')
-      else if (injected) flashButton(button, 'Added to input')
-      else flashButton(button, 'Copy failed')
+      if (clip.ok && injected) flashButton(button, translate('copiedAdded'))
+      else if (clip.ok) flashButton(button, translate('copied'))
+      else if (injected) flashButton(button, translate('added'))
+      else flashButton(button, translate('failed'))
     })
     .catch((error) => {
       console.warn('[view-image] copy button handler failed:', error)
-      flashButton(button, 'Copy failed')
+      flashButton(button, translate('failed'))
     })
 }
 
@@ -262,7 +290,7 @@ function decorate(item) {
     holder.style.cssText = 'position:relative;display:inline-block;max-width:100%;'
     const img = document.createElement('img')
     img.src = imageUrlFor(id)
-    img.alt = 'pasted image'
+    img.alt = translate('alt')
     img.loading = 'lazy'
     img.decoding = 'async'
     img.draggable = true
@@ -295,8 +323,8 @@ function decorate(item) {
   // 这里只挂纯视觉反馈（mousedown 高亮），丢了也不影响功能。
   const copy = document.createElement('button')
   copy.type = 'button'
-  copy.textContent = COPY_LABEL
-  copy.title = 'Copy to clipboard and add to input'
+  copy.textContent = translate('copy')
+  copy.title = translate('title')
   copy.dataset.viewImageCopy = id
   copy.dataset.viewImageMediaType = mediaType
   copy.style.cssText = 'position:absolute;top:6px;right:6px;z-index:1;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;line-height:18px;cursor:pointer;opacity:0;transition:opacity .12s;'
@@ -333,6 +361,26 @@ function scheduleScan() {
 
 function apply(ctx) {
   if (typeof document === 'undefined') return
+  // 接入 dsh 界面语言：注册双语字典；语言实时切换时刷新已渲染按钮文案。
+  // 环境不支持 locale 服务时回退英文，不阻塞功能。
+  const localeCleanups = []
+  try {
+    if (typeof ctx.locale?.register === 'function' && typeof ctx.locale?.bind === 'function' && typeof ctx.locale?.subscribe === 'function') {
+      const disposeDict = ctx.locale.register(LOCALE_NS, DICTS)
+      if (typeof disposeDict === 'function') localeCleanups.push(disposeDict)
+      translate = ctx.locale.bind(LOCALE_NS)
+      const unsubscribe = ctx.locale.subscribe(() => {
+        // 实时切换：默认态按钮直接换成新语言；反馈态按钮的 2s 还原定时器
+        // 内部也用 translate('copy')，还原时自然用新语言。
+        document.querySelectorAll('[data-view-image-copy]').forEach((btn) => {
+          btn.textContent = translate('copy')
+        })
+      })
+      if (typeof unsubscribe === 'function') localeCleanups.push(unsubscribe)
+    }
+  } catch (error) {
+    console.warn('[view-image] locale registration failed, falling back to English:', error)
+  }
   const root = document.body ?? document.documentElement
   const observer = new MutationObserver(scheduleScan)
   observer.observe(root, { childList: true, subtree: true })
@@ -355,10 +403,15 @@ function apply(ctx) {
   ctx.on('dispose', () => {
     observer.disconnect()
     document.removeEventListener('click', onDocumentClick, true)
+    for (const cleanup of localeCleanups) {
+      try { cleanup() } catch { /* ignore */ }
+    }
   })
 }
 
 exports.name = name
+/** 声明所需服务：locale 用于界面语言实时切换（与官方模块一致）。 */
+exports.inject = ['locale']
 exports.apply = apply
 
 return module.exports; } });
