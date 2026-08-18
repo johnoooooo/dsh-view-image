@@ -4,18 +4,24 @@
 
 ## 安装
 
+克隆仓库并安装到目标 profile（把 `web` 换成你的 profile 名）：
+
 ```bash
-dsh plugin --profile web add file:/path/to/dsh-view-image
+git clone https://github.com/johnoooooo/dsh-view-image.git
+cd dsh-view-image
+dsh plugin --profile web add file:$PWD
 ```
 
-> `file:` 安装是**拷贝**而非软链：改完插件代码后需先移除再重装（已存在的依赖 `add` 不会刷新拷贝），然后重启 dsh：
+安装完成后重启 dsh 生效。
+
+> `file:` 安装是**拷贝**而非软链：改完插件代码后，已存在的依赖 `add` 不会刷新拷贝，需先移除再重装：
 >
 > ```bash
 > dsh plugin --profile web remove dsh-view-image
-> dsh plugin --profile web add file:/path/to/dsh-view-image
+> dsh plugin --profile web add file:$PWD
 > ```
 
-也可以不装 bundle，把 `cordis.patch.yml` 里的 insert 行复制进 profile 的 `cordis.patch.yml`（包需先安装）。
+也可以不装 bundle，手动把仓库 `cordis.patch.yml` 中的 insert 条目复制进 profile 的 `cordis.patch.yml`（包仍需先安装到 profile）。
 
 ## 配置视觉模型
 
