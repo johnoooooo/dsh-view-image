@@ -6,14 +6,15 @@
  * 日志里没有 image block，所以这里用 DOM 增强补齐展示层，尽量对齐原生行为：
  *   - 位置：下钻 display:contents 包装层，插入到 userRow 顶部（右对齐列）；
  *   - 尺寸：按标记里的宽高计算原生 singleFit 尺寸，object-fit cover；
- *   - 点击放大（轻量 lightbox）；悬停显示「加入输入框」按钮；
+ *   - 点击放大（轻量 lightbox）；悬停显示「复制」按钮；
  *   - 可拖拽到输入框（预取字节构造 File 放入 dataTransfer，走 composer 原生 drop 路径）。
  *
- * 「加入输入框」不依赖剪贴板：直接合成 document 级 drop 事件交给 composer 的
+ * 「复制」不依赖剪贴板：直接合成 document 级 drop 事件交给 composer 的
  * 原生 drop 处理器（dsh-client-ui-conversation 在 document 上监听 drop →
- * intakeImages → addImages），等价于把图片拖进输入框。同时尽力写剪贴板
- * （带超时 + execCommand 兜底），Ctrl+V 仍可用。点击用 document 捕获阶段
- * 委托处理，React 重渲染清掉按钮节点也不会丢点击（见 BUGS.md）。
+ * intakeImages → addImages），点击后图片直接作为草稿图进入输入框。同时
+ * 尽力写剪贴板（带超时 + execCommand 兜底），Ctrl+V 仍可用；按钮反馈会
+ * 显示「已复制到剪贴板」（以及是否已加入输入框）。点击用 document 捕获
+ * 阶段委托处理，React 重渲染清掉按钮节点也不会丢点击（见 BUGS.md）。
  * 预览 URL 会带上标记里的元数据查询参数，dsh 重启后（进程内 registry 丢失）
  * 服务端才能凭参数兑底从附件库读图，旧会话缩略图才不会 404。
  * 纯展示层——模型上下文内容不变。
@@ -82,7 +83,7 @@ function singleFit(width, height) {
 
 // ─ 加入输入框 / 复制：绕开剪贴板的可靠路径 + 尽力剪贴板 ────────────
 
-const COPY_LABEL = '加入输入框'
+const COPY_LABEL = '复制'
 const CLIPBOARD_TIMEOUT_MS = 3000
 
 /**
@@ -194,8 +195,9 @@ function handleCopyClick(button, id, mediaType) {
       // 副路径：尽力写剪贴板，Ctrl+V 仍可用。
       const clip = await writeImageToClipboard(file)
       console.log('[view-image] 复制结果：', { injected, clip })
-      if (injected) flashButton(button, '已加入输入框')
-      else if (clip.ok) flashButton(button, '已复制，可 Ctrl+V 粘贴')
+      if (clip.ok && injected) flashButton(button, '已复制到剪贴板，已加入输入框')
+      else if (clip.ok) flashButton(button, '已复制到剪贴板')
+      else if (injected) flashButton(button, '已加入输入框')
       else flashButton(button, '复制失败')
     })
     .catch((error) => {
@@ -281,14 +283,14 @@ function decorate(item) {
   // 预取字节并把解析好的 File 写回缓存，供拖拽/复制同步使用。
   void bytesFor(id, mediaType).then((file) => byteCache.set(id, file)).catch(() => {})
 
-  // 悬停可见的「加入输入框」按钮。点击处理不在按钮节点上——React 重渲染会
+  // 悬停可见的「复制」按钮。点击处理不在按钮节点上——React 重渲染会
   // 清掉并重建 holder，节点上的监听器随时可能随旧节点一起被丢弃；改为
   // document 捕获阶段的委托（见 apply），按 data-view-image-copy 定位按钮。
   // 这里只挂纯视觉反馈（mousedown 高亮），丢了也不影响功能。
   const copy = document.createElement('button')
   copy.type = 'button'
   copy.textContent = COPY_LABEL
-  copy.title = '把图片加入输入框（同时复制到剪贴板）'
+  copy.title = '复制到剪贴板，同时加入输入框'
   copy.dataset.viewImageCopy = id
   copy.dataset.viewImageMediaType = mediaType
   copy.style.cssText = 'position:absolute;top:6px;right:6px;z-index:1;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;line-height:18px;cursor:pointer;opacity:0;transition:opacity .12s;'
@@ -325,7 +327,7 @@ function apply(ctx) {
   const root = document.body ?? document.documentElement
   const observer = new MutationObserver(scheduleScan)
   observer.observe(root, { childList: true, subtree: true })
-  // 「加入输入框」按钮点击：document 捕获阶段委托。按钮节点被 React 重渲染
+  // 「复制」按钮点击：document 捕获阶段委托。按钮节点被 React 重渲染
   // 清掉重建也不影响点击处理；捕获阶段 stopPropagation 让这次点击不落到
   // React/dsh 的其他处理器上（按钮完全由本插件自理）。
   const onDocumentClick = (event) => {

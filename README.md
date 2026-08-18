@@ -89,9 +89,9 @@ cp vision-model.example.json ~/.dsh/vision-model.json
 3. 模型看到标记后自动调用 `view_image`（传 `attachment_id` 等字段），用你配的
    视觉模型识别，返回纯文本描述；**聊天流里用户消息会内联显示这张粘贴图**
    （与视觉路由下 ImageGallery 同位置：气泡上方、右对齐、240px 缩略图；
-   点击放大、悬停「加入输入框」按钮一键把图片作为草稿图插回输入框（不依赖
-   剪贴板，同时尽力复制到剪贴板）、可拖拽到输入框重新发送），工具行保持
-   dsh 原生卡片样式。
+   点击放大、悬停「复制」按钮一键把图片作为草稿图插回输入框（不依赖
+   剪贴板，同时尽力复制到剪贴板，按钮反馈「已复制到剪贴板」）、可拖拽到
+   输入框重新发送），工具行保持 dsh 原生卡片样式。
 
    > 曾有一个已修复的 bug：旧版「复制」按钮只写剪贴板，部分环境里点击后
    > 无法粘贴到输入框；根因与修复见 [BUGS.md](./BUGS.md)。
@@ -138,11 +138,12 @@ dsh --profile headless "用 view_image 工具查看 /path/to/img.png 并描述�
 - 客户端模块（`dsh.client`，web 平台）：纯展示层 DOM 增强——找到用户消息里的
   `[图片附件: sha256:...]` 标记，把缩略图插到 `userRow`（下钻 `display:contents`
   包装层），与视觉路由下 ImageGallery 同位置：气泡上方、右对齐、240px singleFit、
-  object-fit cover。交互：点击放大（lightbox）、悬停「加入输入框」按钮（合成
+  object-fit cover。交互：点击放大（lightbox）、悬停「复制」按钮（合成
   document 级 drop 事件走 composer 原生 drop → addImages，直接把图片作为草稿图
-  插回输入框；同时带超时/兜底地尽力写剪贴板，Ctrl+V 仍可用；点击用 document
-  捕获阶段委托，React 重渲染不丢点击）、可拖拽到输入框（预取字节构造 File
-  走 composer 原生 drop 路径）。不接管任何工具行/卡片，模型上下文内容不变。
+  插回输入框；同时带超时/兜底地尽力写剪贴板，按钮反馈「已复制到剪贴板」，
+  Ctrl+V 仍可用；点击用 document 捕获阶段委托，React 重渲染不丢点击）、
+  可拖拽到输入框（预取字节构造 File 走 composer 原生 drop 路径）。
+  不接管任何工具行/卡片，模型上下文内容不变。
 
 ## 附件存储
 
