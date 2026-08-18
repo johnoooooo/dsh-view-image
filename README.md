@@ -6,8 +6,6 @@
 不需要**支持视觉模态——内置 `read_image` 在模型未声明 image 输入时会直接拒绝（
 `assertImageCapableRoute` 抛错），而本插件的 `view_image` 不受此限制。
 
-> 完整的设计思路（架构、数据流、关键机制）见 [DESIGN.md](./DESIGN.md)。
-
 ## 安装
 
 把本包安装进目标 profile（与 `dsh1024` 相同的方式）：

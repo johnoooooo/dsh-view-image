@@ -4,3 +4,6 @@ node_modules/
 # 本地测试图片
 image*.png
 .DS_Store
+# 内部文档，不公开追踪
+BUGS.md
+DESIGN.md
