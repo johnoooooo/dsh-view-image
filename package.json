@@ -26,7 +26,7 @@
     "lib",
     "client",
     "cordis.patch.yml",
-    "vision-model.example.json",
+    "vision-model.example.opencode.json",
     "vision-model.example.aliyun.json",
     "README.md"
   ],

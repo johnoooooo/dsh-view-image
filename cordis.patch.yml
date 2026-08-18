@@ -7,7 +7,7 @@
 # profile, e.g. `dsh plugin --profile <name> add file:<path>`).
 #
 # The vision model is NOT configured here — it lives in
-# $DSH_HOME/vision-model.json (see vision-model.example.json).
+# $DSH_HOME/vision-model.json (see vision-model.example.opencode.json).
 #
 # defaultPrompt: 主模型未传 intent 时原样发给视觉模型的提示词（不拼接任何后缀；可在 profile 层覆盖）。
 - insert:

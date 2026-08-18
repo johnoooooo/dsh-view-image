@@ -25,7 +25,7 @@ dsh plugin --profile web remove dsh-view-image
 复制示例并编辑 `$DSH_HOME/vision-model.json`（默认 `~/.dsh/vision-model.json`）：
 
 ```bash
-cp vision-model.example.json ~/.dsh/vision-model.json
+cp vision-model.example.opencode.json ~/.dsh/vision-model.json
 ```
 
 **阿里云百炼（通义千问 VL）**：
