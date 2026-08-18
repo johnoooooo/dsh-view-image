@@ -15,7 +15,7 @@
 ```bash
 # 一步完成：安装包，并把 "dsh-view-image" 自动追加到
 # dsh.profile.bundles（与 dependencies 一起写进 profile 的 package.json）
-dsh plugin --profile web add file:/mnt/d/codes/dsh-view-image
+dsh plugin --profile web add file:/path/to/dsh-view-image
 ```
 
 > 注意：`file:` 安装是**拷贝**进 profile 的 node_modules，不是软链。
@@ -24,7 +24,7 @@ dsh plugin --profile web add file:/mnt/d/codes/dsh-view-image
 >
 > ```bash
 > dsh plugin --profile web remove dsh-view-image
-> dsh plugin --profile web add file:/mnt/d/codes/dsh-view-image
+> dsh plugin --profile web add file:/path/to/dsh-view-image
 > ```
 >
 > 再重启 dsh。
