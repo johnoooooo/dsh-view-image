@@ -80,10 +80,6 @@ dsh --profile headless "用 view_image 工具查看 /path/to/img.png 并描述�
 
 图片存放在 `~/.dsh/attachments/v1/objects/<sha256前2位>/<sha256>`。**没有 GC**：删除会话不会删附件，想清空就 `rm -rf ~/.dsh/attachments`。
 
-## 与 view-image（pi 扩展）的关系
-
-本插件是 [@johnoooooo/view-image](https://github.com/johnoooooo/view-image) 在 dsh 插件体系下的移植：同一思路（独立视觉模型 + 只回纯文本），机制换成 cordis 插件（`ctx.tools.register(defineTool(...))`），配置从 `~/.pi/agent/vision-model.json` 换成 `~/.dsh/vision-model.json`。
-
 ## 许可
 
 MIT
