@@ -6,6 +6,8 @@
 不需要**支持视觉模态——内置 `read_image` 在模型未声明 image 输入时会直接拒绝（
 `assertImageCapableRoute` 抛错），而本插件的 `view_image` 不受此限制。
 
+> 完整的设计思路（架构、数据流、关键机制）见 [DESIGN.md](./DESIGN.md)。
+
 ## 安装
 
 把本包安装进目标 profile（与 `dsh1024` 相同的方式）：
@@ -63,19 +65,23 @@ cp vision-model.example.json ~/.dsh/vision-model.json
 > 配置缺失或不正确时：插件**仍然加载**（不报错），只打一条 `view-image` 日志，
 > `view_image` 工具不会注册。补齐配置后重启，或改配置触发 HMR 重建即可。
 
-### 可选插件配置（cordis.patch.yml 里给行加 config）
+### 可选插件配置（cordis.patch.yml）
+
+插件 bundle 已内置一套默认配置（见项目根目录 `cordis.patch.yml`，开箱即用）。
+要覆盖时，在 profile 的 `cordis.patch.yml` 里用**同 id 覆盖条目**（不是 insert，
+避免与 bundle 重复；config 会被**整体替换**，覆盖时把要保留的字段都写上）：
 
 ```yaml
-- insert:
-    - id: view-image
-      name: 'dsh-view-image'
-      config:
-        configPath: ~/.dsh/vision-model.json   # 默认
-        requestTimeoutMs: 180000               # 单次视觉请求超时（毫秒）
-        maxImageBytes: 10485760                # 单张图片字节上限（file_path 路径），超限报错不截断
-        defaultPrompt: '详细描述这张图片的内容，包括文字、图形、布局等关键信息。用中文回答。'
-        rewritePastedImages: true              # 是否接管 Web 粘贴图片（默认 true）
-        inlineImagePreview: true               # 是否挂附件预览路由 + 聊天里内联显示粘贴图（默认 true）
+- id: view-image
+  name: 'dsh-view-image'
+  config:
+    configPath: ~/.dsh/vision-model.json   # 默认
+    requestTimeoutMs: 180000               # 单次视觉请求超时（毫秒）
+    maxImageBytes: 10485760                # 单张图片字节上限（file_path 路径），超限报错不截断
+    defaultPrompt: '完整描述图片中所有内容，包括所有文字、图形和布局结构。用中文回答。'   # 主模型不传 intent 时，视觉模型收到的完整提示词
+    intentGuidance: 'If the user gives no specific focus, describe the image in full by default: 完整描述图片中所有内容，包括所有文字、图形和布局结构，用中文回答。'   # 软引导：主模型生成 intent 时参考的默认偏好（用户明确给出关注点时以用户为准）；空字符串禁用
+    rewritePastedImages: true              # 是否接管 Web 粘贴图片（默认 true）
+    inlineImagePreview: true               # 是否挂附件预览路由 + 聊天里内联显示粘贴图（默认 true）
 ```
 
 ## 使用
@@ -87,11 +93,12 @@ cp vision-model.example.json ~/.dsh/vision-model.json
    落库为持久附件，并替换成文本标记 `[图片附件: ...]` 发给模型——所以不会再弹
    「当前模型不支持图片」的拒绝提示。
 3. 模型看到标记后自动调用 `view_image`（传 `attachment_id` 等字段），用你配的
-   视觉模型识别，返回纯文本描述；**聊天流里用户消息会内联显示这张粘贴图**
+   视觉模型识别，返回纯文本描述；**聊天流里用户消息会内联显示粘贴图**
    （与视觉路由下 ImageGallery 同位置：气泡上方、右对齐、240px 缩略图；
-   点击放大、悬停「复制」按钮一键把图片作为草稿图插回输入框（不依赖
-   剪贴板，同时尽力复制到剪贴板，按钮反馈「已复制到剪贴板」）、可拖拽到
-   输入框重新发送），工具行保持 dsh 原生卡片样式。
+   一次粘贴多张图会全部显示；点击放大、悬停「复制」按钮一键把图片作为
+   草稿图插回输入框（不依赖剪贴板，同时尽力复制到剪贴板，按钮反馈
+   「已复制到剪贴板，已加入输入框」）、可拖拽到输入框重新发送），
+   工具行保持 dsh 原生卡片样式。
 
    > 曾有一个已修复的 bug：旧版「复制」按钮只写剪贴板，部分环境里点击后
    > 无法粘贴到输入框；根因与修复见 [BUGS.md](./BUGS.md)。
@@ -132,15 +139,19 @@ dsh --profile headless "用 view_image 工具查看 /path/to/img.png 并描述�
   重建时会恢复原实现并清标志。
 - 粘贴改写时把落库的完整附件 ref 登记到进程内 registry，`view_image` 读取时
   优先用登记 ref，模型不必精确转抄标记中的每个字段（跨重启 replay 由标记字段兑底）。
+- `view_image` 的 intent 参数描述会拼接 `intentGuidance` 软引导文案（默认引导模型
+  完整描述；用户明确给出关注点时仍以用户为准）；主模型不传 intent 时用
+  `defaultPrompt` 作为视觉模型的完整提示词。
 - 附件预览路由 `/dsh-view-image/attachment/<sha256>`（`webServer` 前缀路由）：
   按内容寻址 id 提供附件字节（先查进程内 registry，再靠 URL 里的 ref 字段兑底，
   `attachments.readImage` 做完整性校验），供客户端内联图拉取。
 - 客户端模块（`dsh.client`，web 平台）：纯展示层 DOM 增强——找到用户消息里的
-  `[图片附件: sha256:...]` 标记，把缩略图插到 `userRow`（下钻 `display:contents`
-  包装层），与视觉路由下 ImageGallery 同位置：气泡上方、右对齐、240px singleFit、
-  object-fit cover。交互：点击放大（lightbox）、悬停「复制」按钮（合成
-  document 级 drop 事件走 composer 原生 drop → addImages，直接把图片作为草稿图
-  插回输入框；同时带超时/兜底地尽力写剪贴板，按钮反馈「已复制到剪贴板」，
+  `[图片附件: sha256:...]` 标记（一条消息可含多个，一次粘贴多张图逐个渲染），
+  把缩略图插到 `userRow`（下钻 `display:contents` 包装层），与视觉路由下
+  ImageGallery 同位置：气泡上方、右对齐、240px singleFit、object-fit cover。
+  交互：点击放大（lightbox）、悬停「复制」按钮（合成 document 级 drop 事件
+  走 composer 原生 drop → addImages，直接把图片作为草稿图插回输入框；同时
+  带超时/兜底地尽力写剪贴板，按钮反馈「已复制到剪贴板，已加入输入框」，
   Ctrl+V 仍可用；点击用 document 捕获阶段委托，React 重渲染不丢点击）、
   可拖拽到输入框（预取字节构造 File 走 composer 原生 drop 路径）。
   不接管任何工具行/卡片，模型上下文内容不变。
