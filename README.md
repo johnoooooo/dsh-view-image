@@ -25,6 +25,20 @@ dsh plugin --profile web add file:/path/to/dsh-view-image
 cp vision-model.example.json ~/.dsh/vision-model.json
 ```
 
+**阿里云百炼（通义千问 VL）**：
+
+```json
+{
+  "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+  "apiKey": "sk-your-aliyun-api-key",
+  "model": "qwen-vl-max",
+  "api": "openai-completions",
+  "maxTokens": 2048
+}
+```
+
+**opencode.ai（MiMo-V2.5）**：
+
 ```json
 {
   "baseUrl": "https://opencode.ai/zen/go/v1/chat/completions",
@@ -44,8 +58,6 @@ cp vision-model.example.json ~/.dsh/vision-model.json
 | `maxTokens` | 最大输出 token（默认 2048；密集 OCR 可提到 4096-8192） |
 
 配置缺失时插件正常加载但不注册 `view_image`（只打一条日志），补齐后重启或 `/reload` 生效。
-
-> 另有阿里云百炼（通义千问 VL）示例：`vision-model.example.aliyun.json`
 
 ## 可选插件配置
 
