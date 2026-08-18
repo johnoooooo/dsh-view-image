@@ -14,4 +14,4 @@
     - id: view-image
       name: 'dsh-view-image'
       config:
-        defaultPrompt: 'Describe the image in full, including all text (extract verbatim, do not translate), figures, and layout. Answer in the same language as the user.'
+        defaultPrompt: 'Describe the image in full, including all text (extract verbatim, do not translate), figures, and layout.'
