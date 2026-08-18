@@ -14,4 +14,4 @@
     - id: view-image
       name: 'dsh-view-image'
       config:
-        defaultPrompt: '完整描述图片中所有内容，包括所有文字、图形和布局结构。用中文回答。'
+        defaultPrompt: '完整描述图片中所有内容，包括所有文字（原样提取，不翻译）、图形和布局结构。用与用户相同的语言回答。'
