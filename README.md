@@ -27,20 +27,20 @@ cp vision-model.example.json ~/.dsh/vision-model.json
 
 ```json
 {
-  "baseUrl": "http://localhost:11434/v1",
-  "apiKey": "ollama",
-  "model": "llama3.2-vision",
+  "baseUrl": "https://opencode.ai/zen/go/v1/chat/completions",
+  "apiKey": "sk-your-api-key",
+  "model": "mimo-v2.5",
   "api": "openai-completions",
-  "maxTokens": 2048
+  "maxTokens": 8092
 }
 ```
 
 | 字段 | 说明 |
 |------|------|
-| `baseUrl` | OpenAI 兼容端点（Ollama `/v1` / vLLM / LiteLLM / OpenRouter 等） |
-| `apiKey` | 端点 API Key（Ollama 填 `ollama`） |
-| `model` | 视觉模型名 |
-| `api` | 协议：`openai-completions`（默认，自动追加 `/chat/completions`）或 `anthropic-messages` |
+| `baseUrl` | OpenAI 兼容端点（Ollama `/v1` / vLLM / LiteLLM / OpenRouter / opencode.ai 等；省略 `/chat/completions` 后缀时插件自动补） |
+| `apiKey` | 端点 API Key（占位 `sk-your-api-key` 换成自己的） |
+| `model` | 视觉模型名（如 `mimo-v2.5`） |
+| `api` | 协议：`openai-completions`（默认，@ai-sdk/openai-compatible 兼容）或 `anthropic-messages` |
 | `maxTokens` | 最大输出 token（默认 2048；密集 OCR 可提到 4096-8192） |
 
 配置缺失时插件正常加载但不注册 `view_image`（只打一条日志），补齐后重启或 `/reload` 生效。

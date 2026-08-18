@@ -1,7 +1,7 @@
 {
-  "baseUrl": "http://localhost:11434/v1",
-  "apiKey": "ollama",
-  "model": "llama3.2-vision",
+  "baseUrl": "https://opencode.ai/zen/go/v1/chat/completions",
+  "apiKey": "sk-your-api-key",
+  "model": "mimo-v2.5",
   "api": "openai-completions",
-  "maxTokens": 2048
+  "maxTokens": 8092
 }
