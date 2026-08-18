@@ -9,7 +9,7 @@
 # The vision model is NOT configured here — it lives in
 # $DSH_HOME/vision-model.json (see vision-model.example.json).
 #
-# defaultPrompt: 模型不传 intent 时视觉模型收到的完整提示词（可在 profile 层覆盖）。
+# defaultPrompt: 主模型未传 intent 时原样发给视觉模型的提示词（不拼接任何后缀；可在 profile 层覆盖）。
 # intentGuidance 默认跟随 defaultPrompt（同一默认偏好的两个作用点），
 # 如需单独调引导可在 profile 层配置（空字符串禁用）。
 - insert:
