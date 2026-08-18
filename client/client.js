@@ -6,8 +6,14 @@
  * 日志里没有 image block，所以这里用 DOM 增强补齐展示层，尽量对齐原生行为：
  *   - 位置：下钻 display:contents 包装层，插入到 userRow 顶部（右对齐列）；
  *   - 尺寸：按标记里的宽高计算原生 singleFit 尺寸，object-fit cover；
- *   - 点击放大（轻量 lightbox）；悬停显示「复制」按钮（写剪贴板）；
+ *   - 点击放大（轻量 lightbox）；悬停显示「加入输入框」按钮；
  *   - 可拖拽到输入框（预取字节构造 File 放入 dataTransfer，走 composer 原生 drop 路径）。
+ *
+ * 「加入输入框」不依赖剪贴板：直接合成 document 级 drop 事件交给 composer 的
+ * 原生 drop 处理器（dsh-client-ui-conversation 在 document 上监听 drop →
+ * intakeImages → addImages），等价于把图片拖进输入框。同时尽力写剪贴板
+ * （带超时 + execCommand 兜底），Ctrl+V 仍可用。点击用 document 捕获阶段
+ * 委托处理，React 重渲染清掉按钮节点也不会丢点击（见 BUGS.md）。
  * 纯展示层——模型上下文内容不变。
  *
  * 注意：图片插入在 React 管辖的子树内，气泡重渲染会清掉它；MutationObserver
@@ -49,6 +55,130 @@ function singleFit(width, height) {
   return ratio >= 1
     ? { width: 240, height: Math.round(240 / ratio) }
     : { width: Math.round(240 * ratio), height: 240 }
+}
+
+// ─ 加入输入框 / 复制：绕开剪贴板的可靠路径 + 尽力剪贴板 ────────────
+
+const COPY_LABEL = '加入输入框'
+const CLIPBOARD_TIMEOUT_MS = 3000
+
+/**
+ * 把 File 直接交给 composer 的输入框：合成 document 级 drop 事件，走
+ * dsh-client-ui-conversation 的原生 document drop 监听（→ intakeImages →
+ * addImages）。不需要剪贴板权限、不需要输入框焦点，也绕开 paste 端的
+ * machineBusy/locked 守卫（drop 端另有自己的 canAcceptDrop 守卫）。
+ * 返回 composer 是否接收了事件（其处理器收到含文件的 drop 会 preventDefault）。
+ */
+function injectFileIntoComposer(file) {
+  if (typeof DataTransfer === 'undefined' || typeof DragEvent === 'undefined') {
+    console.warn('[view-image] 环境不支持 DataTransfer/DragEvent，跳过直接注入')
+    return false
+  }
+  try {
+    const transfer = new DataTransfer()
+    transfer.items.add(file)
+    const event = new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true })
+    document.dispatchEvent(event)
+    return event.defaultPrevented
+  } catch (error) {
+    console.warn('[view-image] 合成 drop 注入失败：', error)
+    return false
+  }
+}
+
+/** 老式兜底：选中临时 img 后 execCommand('copy')（仅 clipboard API 不可用时）。 */
+function legacyImageCopy(file) {
+  return new Promise((resolve) => {
+    const img = document.createElement('img')
+    const url = URL.createObjectURL(file)
+    const cleanup = () => {
+      try {
+        const selection = window.getSelection()
+        if (selection !== null) selection.removeAllRanges()
+      } catch { /* ignore */ }
+      img.remove()
+      URL.revokeObjectURL(url)
+    }
+    img.onload = () => {
+      let ok = false
+      try {
+        const range = document.createRange()
+        range.selectNode(img)
+        const selection = window.getSelection()
+        if (selection !== null) {
+          selection.removeAllRanges()
+          selection.addRange(range)
+        }
+        ok = document.execCommand('copy')
+      } catch (error) {
+        console.warn('[view-image] execCommand 复制兜底失败：', error)
+      }
+      cleanup()
+      resolve(ok)
+    }
+    img.onerror = () => {
+      cleanup()
+      resolve(false)
+    }
+    img.style.cssText = 'position:fixed;left:-9999px;top:0;'
+    document.body.appendChild(img)
+    img.src = url
+  })
+}
+
+/**
+ * 尽力写剪贴板：现代 ClipboardItem API 优先，与超时赛跑（悬挂的 promise
+ * 也能给出确定结果）；API 不可用时退回 execCommand 兜底。
+ */
+function writeImageToClipboard(file) {
+  if (navigator.clipboard !== undefined && typeof ClipboardItem === 'function') {
+    let writePromise
+    try {
+      // ClipboardItem 构造可能同步抛错（非法 mediaType 等），包一层让它也走失败分支。
+      writePromise = navigator.clipboard.write([new ClipboardItem({ [file.type]: file })])
+    } catch (error) {
+      console.warn('[view-image] ClipboardItem 构造失败：', error)
+      return Promise.resolve({ ok: false, reason: error?.name ?? 'clipboard-item' })
+    }
+    const timeout = new Promise((resolve) => {
+      setTimeout(() => resolve({ ok: false, reason: 'timeout' }), CLIPBOARD_TIMEOUT_MS)
+    })
+    return Promise.race([
+      writePromise.then(
+        () => ({ ok: true }),
+        (error) => ({ ok: false, reason: error === null || error === undefined ? 'rejected' : (error.name ?? String(error)) })
+      ),
+      timeout
+    ])
+  }
+  return legacyImageCopy(file).then((ok) => ({ ok, reason: ok ? undefined : 'legacy-failed' }))
+}
+
+/** 按钮反馈：改文字 2 秒后还原（React 重建按钮节点时旧定时器作用在游离节点上，无害）。 */
+function flashButton(button, text) {
+  button.textContent = text
+  setTimeout(() => {
+    if (button.isConnected) button.textContent = COPY_LABEL
+  }, 2000)
+}
+
+function handleCopyClick(button, id, mediaType) {
+  console.log('[view-image] 复制按钮点击：', id, mediaType)
+  bytesFor(id, mediaType)
+    .then(async (file) => {
+      // 主路径：直接把图片加入输入框（合成 drop，走 composer 原生入口）。
+      const injected = injectFileIntoComposer(file)
+      // 副路径：尽力写剪贴板，Ctrl+V 仍可用。
+      const clip = await writeImageToClipboard(file)
+      console.log('[view-image] 复制结果：', { injected, clip })
+      if (injected) flashButton(button, '已加入输入框')
+      else if (clip.ok) flashButton(button, '已复制，可 Ctrl+V 粘贴')
+      else flashButton(button, '复制失败')
+    })
+    .catch((error) => {
+      console.warn('[view-image] 复制按钮处理失败：', error)
+      flashButton(button, '复制失败')
+    })
 }
 
 // ─ 轻量 lightbox（点击缩略图放大，再点关闭）────────────
@@ -124,20 +254,22 @@ function decorate(item) {
   // 预取字节并把解析好的 File 写回缓存，供拖拽/复制同步使用。
   void bytesFor(id, mediaType).then((file) => byteCache.set(id, file)).catch(() => {})
 
-  // 悬停可见的复制按钮：确定性写剪贴板（复制后可直接 Ctrl+V 到输入框）。
+  // 悬停可见的「加入输入框」按钮。点击处理不在按钮节点上——React 重渲染会
+  // 清掉并重建 holder，节点上的监听器随时可能随旧节点一起被丢弃；改为
+  // document 捕获阶段的委托（见 apply），按 data-view-image-copy 定位按钮。
+  // 这里只挂纯视觉反馈（mousedown 高亮），丢了也不影响功能。
   const copy = document.createElement('button')
   copy.type = 'button'
-  copy.textContent = '复制'
-  copy.style.cssText = 'position:absolute;top:6px;right:6px;z-index:1;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:6px;padding:2px 8px;font-size:11px;line-height:18px;cursor:pointer;opacity:0;transition:opacity .12s;'
+  copy.textContent = COPY_LABEL
+  copy.title = '把图片加入输入框（同时复制到剪贴板）'
+  copy.dataset.viewImageCopy = id
+  copy.dataset.viewImageMediaType = mediaType
+  copy.style.cssText = 'position:absolute;top:6px;right:6px;z-index:1;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;line-height:18px;cursor:pointer;opacity:0;transition:opacity .12s;'
   holder.addEventListener('mouseenter', () => { copy.style.opacity = '1' })
   holder.addEventListener('mouseleave', () => { copy.style.opacity = '0' })
-  copy.addEventListener('click', (event) => {
-    event.stopPropagation()
-    void bytesFor(id, mediaType)
-      .then((file) => navigator.clipboard.write([new ClipboardItem({ [mediaType]: file })]))
-      .then(() => { copy.textContent = '已复制'; setTimeout(() => { copy.textContent = '复制' }, 1200) })
-      .catch(() => { copy.textContent = '复制失败'; setTimeout(() => { copy.textContent = '复制' }, 1200) })
-  })
+  copy.addEventListener('mousedown', () => { copy.style.background = 'rgba(0,0,0,.8)' })
+  copy.addEventListener('mouseup', () => { copy.style.background = 'rgba(0,0,0,.55)' })
+  copy.addEventListener('mouseleave', () => { copy.style.background = 'rgba(0,0,0,.55)' })
 
   holder.appendChild(img)
   holder.appendChild(copy)
@@ -166,11 +298,26 @@ function apply(ctx) {
   const root = document.body ?? document.documentElement
   const observer = new MutationObserver(scheduleScan)
   observer.observe(root, { childList: true, subtree: true })
+  // 「加入输入框」按钮点击：document 捕获阶段委托。按钮节点被 React 重渲染
+  // 清掉重建也不影响点击处理；捕获阶段 stopPropagation 让这次点击不落到
+  // React/dsh 的其他处理器上（按钮完全由本插件自理）。
+  const onDocumentClick = (event) => {
+    const target = event.target
+    if (!(target instanceof Element)) return
+    const button = target.closest('[data-view-image-copy]')
+    if (button === null || button.dataset.viewImageCopy === undefined) return
+    event.stopPropagation()
+    handleCopyClick(button, button.dataset.viewImageCopy, button.dataset.viewImageMediaType ?? 'image/png')
+  }
+  document.addEventListener('click', onDocumentClick, true)
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closeLightbox()
   })
   scheduleScan()
-  ctx.on('dispose', () => observer.disconnect())
+  ctx.on('dispose', () => {
+    observer.disconnect()
+    document.removeEventListener('click', onDocumentClick, true)
+  })
 }
 
 exports.name = name
