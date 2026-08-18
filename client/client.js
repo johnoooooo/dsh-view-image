@@ -14,6 +14,8 @@
  * intakeImages → addImages），等价于把图片拖进输入框。同时尽力写剪贴板
  * （带超时 + execCommand 兜底），Ctrl+V 仍可用。点击用 document 捕获阶段
  * 委托处理，React 重渲染清掉按钮节点也不会丢点击（见 BUGS.md）。
+ * 预览 URL 会带上标记里的元数据查询参数，dsh 重启后（进程内 registry 丢失）
+ * 服务端才能凭参数兑底从附件库读图，旧会话缩略图才不会 404。
  * 纯展示层——模型上下文内容不变。
  *
  * 注意：图片插入在 React 管辖的子树内，气泡重渲染会清掉它；MutationObserver
@@ -32,9 +34,28 @@ const META_RE = /（(image\/[\w+-]+),\s*(\d+)x(\d+),\s*(\d+) bytes）/
 
 /** id → File（预取字节，供拖拽/复制使用；内容寻址，永不过期）。 */
 const byteCache = new Map()
+/** id → { mediaType, width, height, bytes }（从标记解析，供预览 URL 跨重启兑底）。 */
+const metaCache = new Map()
 
+/**
+ * 预览 URL：带上标记里的元数据查询参数。服务端进程内 registry 只在本进程
+ * 存活，重启后为空；此时服务端靠 URL 里的 mediaType/width/height/bytes
+ * 重建附件 ref 再读附件库（缺一个就 404）。不带参数时重启后旧会话缩略图
+ * 必然 404，所以这里必须拼上。
+ */
 function imageUrlFor(id) {
-  return '/dsh-view-image/attachment/' + encodeURIComponent(id)
+  let url = '/dsh-view-image/attachment/' + encodeURIComponent(id)
+  const meta = metaCache.get(id)
+  if (meta !== undefined) {
+    const params = new URLSearchParams()
+    if (typeof meta.mediaType === 'string' && meta.mediaType.length > 0) params.set('mediaType', meta.mediaType)
+    if (Number.isFinite(meta.width)) params.set('width', String(meta.width))
+    if (Number.isFinite(meta.height)) params.set('height', String(meta.height))
+    if (Number.isFinite(meta.bytes)) params.set('bytes', String(meta.bytes))
+    const query = params.toString()
+    if (query.length > 0) url += '?' + query
+  }
+  return url
 }
 
 function bytesFor(id, mediaType) {
@@ -46,7 +67,9 @@ function bytesFor(id, mediaType) {
       .catch((error) => { byteCache.delete(id); throw error })
     byteCache.set(id, pending)
   }
-  return pending
+  // 预取完成后 decorate 会把缓存里的 Promise 替换成解析好的 File（供拖拽同步读），
+  // 所以这里统一兜底：调用方拿到的永远是 Promise。
+  return pending instanceof File ? Promise.resolve(pending) : pending
 }
 
 /** 原生 MessageImage 的 singleFit：240px 基准，宽高比夹在 0.25–4。 */
@@ -213,6 +236,10 @@ function decorate(item) {
   const mediaType = meta?.[1] ?? 'image/png'
   const width = meta === null ? NaN : Number(meta[2])
   const height = meta === null ? NaN : Number(meta[3])
+  const bytes = meta === null ? NaN : Number(meta[4])
+  // 登记元数据：预览 URL 靠它拼查询参数，dsh 重启后（进程内 registry 丢失）
+  // 服务端才能凭参数重建附件 ref 从附件库读图，否则缩略图 404。
+  metaCache.set(id, { mediaType, width, height, bytes })
 
   // React 结构：flowItem > slot 包装(display:contents) > userRow(右对齐列) > userStack > [图片, 气泡]。
   // 下钻 contents 包装层，插到 userRow 顶部 = 原生图片位置（气泡上方、右对齐）。
