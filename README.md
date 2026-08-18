@@ -14,14 +14,11 @@ dsh plugin --profile web add file:$PWD
 
 安装完成后重启 dsh 生效。
 
-> `file:` 安装是**拷贝**而非软链：改完插件代码后，已存在的依赖 `add` 不会刷新拷贝，需先移除再重装：
->
-> ```bash
-> dsh plugin --profile web remove dsh-view-image
-> dsh plugin --profile web add file:$PWD
-> ```
+## 卸载
 
-也可以不装 bundle，手动把仓库 `cordis.patch.yml` 中的 insert 条目复制进 profile 的 `cordis.patch.yml`（包仍需先安装到 profile）。
+```bash
+dsh plugin --profile web remove dsh-view-image
+```
 
 ## 配置视觉模型
 
