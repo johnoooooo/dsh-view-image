@@ -1,0 +1,7 @@
+{
+  "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+  "apiKey": "sk-your-aliyun-api-key",
+  "model": "qwen-vl-max",
+  "api": "openai-completions",
+  "maxTokens": 2048
+}

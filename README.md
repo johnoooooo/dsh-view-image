@@ -45,6 +45,8 @@ cp vision-model.example.json ~/.dsh/vision-model.json
 
 配置缺失时插件正常加载但不注册 `view_image`（只打一条日志），补齐后重启或 `/reload` 生效。
 
+> 另有阿里云百炼（通义千问 VL）示例：`vision-model.example.aliyun.json`
+
 ## 可选插件配置
 
 插件 bundle 自带默认配置（见仓库 `cordis.patch.yml`），开箱即用，一般无需修改。
