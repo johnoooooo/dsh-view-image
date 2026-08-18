@@ -67,22 +67,45 @@ cp vision-model.example.json ~/.dsh/vision-model.json
 
 ### 可选插件配置（cordis.patch.yml）
 
-插件 bundle 已内置一套默认配置（见项目根目录 `cordis.patch.yml`，开箱即用）。
-要覆盖时，在 profile 的 `cordis.patch.yml` 里用**同 id 覆盖条目**（不是 insert，
-避免与 bundle 重复；config 会被**整体替换**，覆盖时把要保留的字段都写上）：
+插件 bundle 自带默认配置（项目根目录 `cordis.patch.yml`，开箱即用）：
+
+```yaml
+- insert:
+    - id: view-image
+      name: 'dsh-view-image'
+      config:
+        defaultPrompt: '完整描述图片中所有内容，包括所有文字、图形和布局结构。用中文回答。'
+        intentGuidance: 'If the user gives no specific focus, describe the image in full by default: 完整描述图片中所有内容，包括所有文字、图形和布局结构，用中文回答。'
+```
+
+要覆盖默认配置时，在 profile 的 `cordis.patch.yml` 里用**同 id 覆盖条目**
+（不是 insert，避免与 bundle 重复报 `duplicate loader entry id`；
+config 会被**整体替换**，覆盖时把要保留的字段都写上）：
 
 ```yaml
 - id: view-image
   name: 'dsh-view-image'
   config:
-    configPath: ~/.dsh/vision-model.json   # 默认
-    requestTimeoutMs: 180000               # 单次视觉请求超时（毫秒）
-    maxImageBytes: 10485760                # 单张图片字节上限（file_path 路径），超限报错不截断
-    defaultPrompt: '完整描述图片中所有内容，包括所有文字、图形和布局结构。用中文回答。'   # 主模型不传 intent 时，视觉模型收到的完整提示词
-    intentGuidance: 'If the user gives no specific focus, describe the image in full by default: 完整描述图片中所有内容，包括所有文字、图形和布局结构，用中文回答。'   # 软引导：主模型生成 intent 时参考的默认偏好（用户明确给出关注点时以用户为准）；空字符串禁用
-    rewritePastedImages: true              # 是否接管 Web 粘贴图片（默认 true）
-    inlineImagePreview: true               # 是否挂附件预览路由 + 聊天里内联显示粘贴图（默认 true）
+    configPath: ~/.dsh/vision-model.json
+    requestTimeoutMs: 180000
+    maxImageBytes: 10485760
+    defaultPrompt: '完整描述图片中所有内容，包括所有文字、图形和布局结构。用中文回答。'
+    intentGuidance: 'If the user gives no specific focus, describe the image in full by default: 完整描述图片中所有内容，包括所有文字、图形和布局结构，用中文回答。'
+    rewritePastedImages: true
+    inlineImagePreview: true
 ```
+
+全部可配置字段：
+
+| 字段 | 默认值 | 说明 |
+|---|---|---|
+| `configPath` | `~/.dsh/vision-model.json` | 视觉模型配置文件路径 |
+| `requestTimeoutMs` | `180000` | 单次视觉请求超时（毫秒） |
+| `maxImageBytes` | `10485760` | 单张图片字节上限（`file_path` 路径），超限报错不截断 |
+| `defaultPrompt` | `完整描述图片中所有内容，包括所有文字、图形和布局结构。用中文回答。` | 主模型不传 intent 时，视觉模型收到的完整提示词 |
+| `intentGuidance` | `If the user gives no specific focus, describe the image in full by default: …` | 软引导：主模型生成 intent 时参考的默认偏好（用户明确给出关注点时仍以用户为准）；空字符串禁用 |
+| `rewritePastedImages` | `true` | 是否接管 Web 粘贴图片（纯文本路由下把贴图转成附件标记） |
+| `inlineImagePreview` | `true` | 是否挂附件预览路由 + 聊天里内联显示粘贴图 |
 
 ## 使用
 
