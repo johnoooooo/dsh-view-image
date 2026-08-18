@@ -75,8 +75,11 @@ cp vision-model.example.json ~/.dsh/vision-model.json
       name: 'dsh-view-image'
       config:
         defaultPrompt: '完整描述图片中所有内容，包括所有文字、图形和布局结构。用中文回答。'
-        intentGuidance: 'If the user gives no specific focus, describe the image in full by default: 完整描述图片中所有内容，包括所有文字、图形和布局结构，用中文回答。'
 ```
+
+> `intentGuidance` **默认跟随 `defaultPrompt`**（同一默认偏好的两个作用点：
+> 一个引导主模型生成 intent，一个兑底视觉模型的完整提示词）——改 `defaultPrompt`
+> 即可同步生效，两处不会漂移。需要单独调引导时再显式配置（空字符串禁用）。
 
 要覆盖默认配置时，在 profile 的 `cordis.patch.yml` 里用**同 id 覆盖条目**
 （不是 insert，避免与 bundle 重复报 `duplicate loader entry id`；
@@ -90,7 +93,7 @@ config 会被**整体替换**，覆盖时把要保留的字段都写上）：
     requestTimeoutMs: 180000
     maxImageBytes: 10485760
     defaultPrompt: '完整描述图片中所有内容，包括所有文字、图形和布局结构。用中文回答。'
-    intentGuidance: 'If the user gives no specific focus, describe the image in full by default: 完整描述图片中所有内容，包括所有文字、图形和布局结构，用中文回答。'
+    intentGuidance: ''   # 可选；默认跟随 defaultPrompt，空字符串禁用引导
     rewritePastedImages: true
     inlineImagePreview: true
 ```
@@ -103,7 +106,7 @@ config 会被**整体替换**，覆盖时把要保留的字段都写上）：
 | `requestTimeoutMs` | `180000` | 单次视觉请求超时（毫秒） |
 | `maxImageBytes` | `10485760` | 单张图片字节上限（`file_path` 路径），超限报错不截断 |
 | `defaultPrompt` | `完整描述图片中所有内容，包括所有文字、图形和布局结构。用中文回答。` | 主模型不传 intent 时，视觉模型收到的完整提示词 |
-| `intentGuidance` | `If the user gives no specific focus, describe the image in full by default: …` | 软引导：主模型生成 intent 时参考的默认偏好（用户明确给出关注点时仍以用户为准）；空字符串禁用 |
+| `intentGuidance` | 跟随 `defaultPrompt`（未显式配置时） | 软引导：主模型生成 intent 时参考的默认偏好（用户明确给出关注点时仍以用户为准）；空字符串禁用 |
 | `rewritePastedImages` | `true` | 是否接管 Web 粘贴图片（纯文本路由下把贴图转成附件标记） |
 | `inlineImagePreview` | `true` | 是否挂附件预览路由 + 聊天里内联显示粘贴图 |
 
