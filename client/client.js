@@ -28,8 +28,8 @@ var module = { exports: {} }; var exports = module.exports;
 
 const name = 'dsh-view-image/client'
 
-/** 标记格式：由宿主 rewriteImageParts 生成。 */
-const MARKER_RE = /\[图片附件:\s*(sha256:[0-9a-f]{64})\]/
+/** 标记格式：由宿主 rewriteImageParts 生成。一条消息里可能有多个（一次粘贴多张图）。 */
+const MARKER_RE = /\[图片附件:\s*(sha256:[0-9a-f]{64})\]/g
 /** 元数据片段：（image/png, 640x360, 13377 bytes） */
 const META_RE = /（(image\/[\w+-]+),\s*(\d+)x(\d+),\s*(\d+) bytes）/
 
@@ -231,17 +231,7 @@ function closeLightbox() {
 
 function decorate(item) {
   const text = item.textContent ?? ''
-  const match = MARKER_RE.exec(text)
-  if (match === null) return
-  const id = match[1]
-  const meta = META_RE.exec(text)
-  const mediaType = meta?.[1] ?? 'image/png'
-  const width = meta === null ? NaN : Number(meta[2])
-  const height = meta === null ? NaN : Number(meta[3])
-  const bytes = meta === null ? NaN : Number(meta[4])
-  // 登记元数据：预览 URL 靠它拼查询参数，dsh 重启后（进程内 registry 丢失）
-  // 服务端才能凭参数重建附件 ref 从附件库读图，否则缩略图 404。
-  metaCache.set(id, { mediaType, width, height, bytes })
+  if (!text.includes('[图片附件:')) return
 
   // React 结构：flowItem > slot 包装(display:contents) > userRow(右对齐列) > userStack > [图片, 气泡]。
   // 下钻 contents 包装层，插到 userRow 顶部 = 原生图片位置（气泡上方、右对齐）。
@@ -249,39 +239,55 @@ function decorate(item) {
   while (row !== null && row.children.length === 1 && getComputedStyle(row).display === 'contents') {
     row = row.firstElementChild
   }
-  if (row === null || row.querySelector('[data-view-image]') !== null) return
+  if (row === null) return
 
-  const holder = document.createElement('div')
-  holder.dataset.viewImage = '1'
-  holder.style.cssText = 'position:relative;display:inline-block;max-width:100%;'
-  const img = document.createElement('img')
-  img.src = imageUrlFor(id)
-  img.alt = '粘贴的图片'
-  img.loading = 'lazy'
-  img.decoding = 'async'
-  img.draggable = true
-  const fit = Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
-    ? singleFit(width, height)
-    : { width: 240, height: 160 }
-  img.style.cssText = 'display:block;width:' + fit.width + 'px;height:' + fit.height + 'px;object-fit:cover;border-radius:10px;cursor:zoom-in;'
-  img.addEventListener('click', (event) => {
-    event.preventDefault()
-    openLightbox(img)
-  })
-  // 拖拽：把预取的字节构造成 File 放进 dataTransfer，composer 的原生 drop 处理器会收下。
-  img.addEventListener('dragstart', (event) => {
-    if (event.dataTransfer === null) return
-    const cached = byteCache.get(id)
-    if (cached instanceof File) {
-      event.dataTransfer.items.add(cached)
-      event.dataTransfer.setData('text/plain', '[图片附件: ' + id + ']')
-    } else {
-      // 字节尚未预取完成：退而传 URL（composer 不收，但至少不是空拖拽）。
-      event.dataTransfer.setData('text/uri-list', imageUrlFor(id))
-    }
-  })
-  // 预取字节并把解析好的 File 写回缓存，供拖拽/复制同步使用。
-  void bytesFor(id, mediaType).then((file) => byteCache.set(id, file)).catch(() => {})
+  // 一次粘贴多张图时消息里会有多个标记：逐个处理，每个标记一个 holder，
+  // 幂等按 id 判断（React 重渲染后重新扫描不会重复插入）。
+  const holders = []
+  for (const match of text.matchAll(MARKER_RE)) {
+    const id = match[1]
+    if (row.querySelector('[data-view-image-id="' + id + '"]') !== null) continue
+    const meta = META_RE.exec(text.slice(match.index))
+    const mediaType = meta?.[1] ?? 'image/png'
+    const width = meta === null ? NaN : Number(meta[2])
+    const height = meta === null ? NaN : Number(meta[3])
+    const bytes = meta === null ? NaN : Number(meta[4])
+    // 登记元数据：预览 URL 靠它拼查询参数，dsh 重启后（进程内 registry 丢失）
+    // 服务端才能凭参数重建附件 ref 从附件库读图，否则缩略图 404。
+    metaCache.set(id, { mediaType, width, height, bytes })
+
+    const holder = document.createElement('div')
+    holder.dataset.viewImage = '1'
+    holder.dataset.viewImageId = id
+    holder.style.cssText = 'position:relative;display:inline-block;max-width:100%;'
+    const img = document.createElement('img')
+    img.src = imageUrlFor(id)
+    img.alt = '粘贴的图片'
+    img.loading = 'lazy'
+    img.decoding = 'async'
+    img.draggable = true
+    const fit = Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
+      ? singleFit(width, height)
+      : { width: 240, height: 160 }
+    img.style.cssText = 'display:block;width:' + fit.width + 'px;height:' + fit.height + 'px;object-fit:cover;border-radius:10px;cursor:zoom-in;'
+    img.addEventListener('click', (event) => {
+      event.preventDefault()
+      openLightbox(img)
+    })
+    // 拖拽：把预取的字节构造成 File 放进 dataTransfer，composer 的原生 drop 处理器会收下。
+    img.addEventListener('dragstart', (event) => {
+      if (event.dataTransfer === null) return
+      const cached = byteCache.get(id)
+      if (cached instanceof File) {
+        event.dataTransfer.items.add(cached)
+        event.dataTransfer.setData('text/plain', '[图片附件: ' + id + ']')
+      } else {
+        // 字节尚未预取完成：退而传 URL（composer 不收，但至少不是空拖拽）。
+        event.dataTransfer.setData('text/uri-list', imageUrlFor(id))
+      }
+    })
+    // 预取字节并把解析好的 File 写回缓存，供拖拽/复制同步使用。
+    void bytesFor(id, mediaType).then((file) => byteCache.set(id, file)).catch(() => {})
 
   // 悬停可见的「复制」按钮。点击处理不在按钮节点上——React 重渲染会
   // 清掉并重建 holder，节点上的监听器随时可能随旧节点一起被丢弃；改为
@@ -301,8 +307,11 @@ function decorate(item) {
   copy.addEventListener('mouseleave', () => { copy.style.background = 'rgba(0,0,0,.55)' })
 
   holder.appendChild(img)
-  holder.appendChild(copy)
-  row.insertBefore(holder, row.firstChild)
+    holder.appendChild(copy)
+    holders.push(holder)
+  }
+  // 按标记出现顺序一次性插入（prepend 保持数组顺序）。
+  if (holders.length > 0) row.prepend(...holders)
 }
 
 // ─ 扫描（初始 + DOM 变化后补齐被 React 清掉的图片）────
