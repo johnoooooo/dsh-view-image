@@ -28,10 +28,10 @@ var module = { exports: {} }; var exports = module.exports;
 
 const name = 'dsh-view-image/client'
 
-/** 标记格式：由宿主 rewriteImageParts 生成。一条消息里可能有多个（一次粘贴多张图）。 */
-const MARKER_RE = /\[图片附件:\s*(sha256:[0-9a-f]{64})\]/g
-/** 元数据片段：（image/png, 640x360, 13377 bytes） */
-const META_RE = /（(image\/[\w+-]+),\s*(\d+)x(\d+),\s*(\d+) bytes）/
+/** 标记格式：由宿主 rewriteImageParts 生成（兼容旧格式 [图片附件: ...]）。一条消息里可能有多个。 */
+const MARKER_RE = /\[(?:图片附件|Image Attachment):\s*(sha256:[0-9a-f]{64})\]/g
+/** 元数据片段：（image/png, 640x360, 13377 bytes），兼容全角/半角括号。 */
+const META_RE = /[（(](image\/[\w+-]+),\s*(\d+)x(\d+),\s*(\d+) bytes[）)]/
 
 /** id → File（预取字节，供拖拽/复制使用；内容寻址，永不过期）。 */
 const byteCache = new Map()
@@ -83,7 +83,7 @@ function singleFit(width, height) {
 
 // ─ 加入输入框 / 复制：绕开剪贴板的可靠路径 + 尽力剪贴板 ────────────
 
-const COPY_LABEL = '复制'
+const COPY_LABEL = 'Copy'
 const CLIPBOARD_TIMEOUT_MS = 3000
 
 /**
@@ -95,7 +95,7 @@ const CLIPBOARD_TIMEOUT_MS = 3000
  */
 function injectFileIntoComposer(file) {
   if (typeof DataTransfer === 'undefined' || typeof DragEvent === 'undefined') {
-    console.warn('[view-image] 环境不支持 DataTransfer/DragEvent，跳过直接注入')
+    console.warn('[view-image] DataTransfer/DragEvent unsupported, skipping direct injection')
     return false
   }
   try {
@@ -105,7 +105,7 @@ function injectFileIntoComposer(file) {
     document.dispatchEvent(event)
     return event.defaultPrevented
   } catch (error) {
-    console.warn('[view-image] 合成 drop 注入失败：', error)
+    console.warn('[view-image] synthetic drop injection failed:', error)
     return false
   }
 }
@@ -135,7 +135,7 @@ function legacyImageCopy(file) {
         }
         ok = document.execCommand('copy')
       } catch (error) {
-        console.warn('[view-image] execCommand 复制兜底失败：', error)
+        console.warn('[view-image] execCommand copy fallback failed:', error)
       }
       cleanup()
       resolve(ok)
@@ -161,7 +161,7 @@ function writeImageToClipboard(file) {
       // ClipboardItem 构造可能同步抛错（非法 mediaType 等），包一层让它也走失败分支。
       writePromise = navigator.clipboard.write([new ClipboardItem({ [file.type]: file })])
     } catch (error) {
-      console.warn('[view-image] ClipboardItem 构造失败：', error)
+      console.warn('[view-image] ClipboardItem construction failed:', error)
       return Promise.resolve({ ok: false, reason: error?.name ?? 'clipboard-item' })
     }
     const timeout = new Promise((resolve) => {
@@ -187,22 +187,22 @@ function flashButton(button, text) {
 }
 
 function handleCopyClick(button, id, mediaType) {
-  console.log('[view-image] 复制按钮点击：', id, mediaType)
+  console.log('[view-image] copy button clicked:', id, mediaType)
   bytesFor(id, mediaType)
     .then(async (file) => {
       // 主路径：直接把图片加入输入框（合成 drop，走 composer 原生入口）。
       const injected = injectFileIntoComposer(file)
       // 副路径：尽力写剪贴板，Ctrl+V 仍可用。
       const clip = await writeImageToClipboard(file)
-      console.log('[view-image] 复制结果：', { injected, clip })
-      if (clip.ok && injected) flashButton(button, '已复制到剪贴板，已加入输入框')
-      else if (clip.ok) flashButton(button, '已复制到剪贴板')
-      else if (injected) flashButton(button, '已加入输入框')
-      else flashButton(button, '复制失败')
+      console.log('[view-image] copy result:', { injected, clip })
+      if (clip.ok && injected) flashButton(button, 'Copied & added to input')
+      else if (clip.ok) flashButton(button, 'Copied to clipboard')
+      else if (injected) flashButton(button, 'Added to input')
+      else flashButton(button, 'Copy failed')
     })
     .catch((error) => {
-      console.warn('[view-image] 复制按钮处理失败：', error)
-      flashButton(button, '复制失败')
+      console.warn('[view-image] copy button handler failed:', error)
+      flashButton(button, 'Copy failed')
     })
 }
 
@@ -231,7 +231,7 @@ function closeLightbox() {
 
 function decorate(item) {
   const text = item.textContent ?? ''
-  if (!text.includes('[图片附件:')) return
+  if (!text.includes('[Image Attachment:') && !text.includes('[图片附件:')) return
 
   // React 结构：flowItem > slot 包装(display:contents) > userRow(右对齐列) > userStack > [图片, 气泡]。
   // 下钻 contents 包装层，插到 userRow 顶部 = 原生图片位置（气泡上方、右对齐）。
@@ -262,7 +262,7 @@ function decorate(item) {
     holder.style.cssText = 'position:relative;display:inline-block;max-width:100%;'
     const img = document.createElement('img')
     img.src = imageUrlFor(id)
-    img.alt = '粘贴的图片'
+    img.alt = 'pasted image'
     img.loading = 'lazy'
     img.decoding = 'async'
     img.draggable = true
@@ -280,7 +280,7 @@ function decorate(item) {
       const cached = byteCache.get(id)
       if (cached instanceof File) {
         event.dataTransfer.items.add(cached)
-        event.dataTransfer.setData('text/plain', '[图片附件: ' + id + ']')
+        event.dataTransfer.setData('text/plain', '[Image Attachment: ' + id + ']')
       } else {
         // 字节尚未预取完成：退而传 URL（composer 不收，但至少不是空拖拽）。
         event.dataTransfer.setData('text/uri-list', imageUrlFor(id))
@@ -296,7 +296,7 @@ function decorate(item) {
   const copy = document.createElement('button')
   copy.type = 'button'
   copy.textContent = COPY_LABEL
-  copy.title = '复制到剪贴板，同时加入输入框'
+  copy.title = 'Copy to clipboard and add to input'
   copy.dataset.viewImageCopy = id
   copy.dataset.viewImageMediaType = mediaType
   copy.style.cssText = 'position:absolute;top:6px;right:6px;z-index:1;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;line-height:18px;cursor:pointer;opacity:0;transition:opacity .12s;'
